@@ -6,7 +6,7 @@ Este projeto integra o Apache Spark com uma aplicação Spring Boot para process
 ## Requisitos
 Para construir e executar esta aplicação, você precisa:
 - Java 17 ou mais recente
-- Maven 3.5.3 ou mais recente
+- Maven 3.6.3 ou mais recente
 
 ## Tecnologias Utilizadas
 - [Spring Boot](https://spring.io/projects/spring-boot)
@@ -14,40 +14,113 @@ Para construir e executar esta aplicação, você precisa:
 
 ## Primeiros Passos
 
-### Dependências do Apache Spark
-Atualmente, o projeto inclui apenas a configuração básica do Spring Boot. Para habilitar as funcionalidades do Apache Spark, as seguintes dependências precisam ser adicionadas ao seu `pom.xml`:
+### Configuração do Projeto (pom.xml)
 
-```xml
-<!-- https://mvnrepository.com/artifact/org.apache.spark/spark-core -->
-<dependency>
-    <groupId>org.apache.spark</groupId>
-    <artifactId>spark-core_2.13</artifactId>
-    <version>3.5.3</version>
-</dependency>
+Para garantir a compatibilidade e a execução correta do Apache Spark com o Spring Boot em Java 17, foram realizadas as seguintes alterações no arquivo `pom.xml`:
 
-<!-- https://mvnrepository.com/artifact/org.apache.spark/spark-sql -->
-<dependency>
-    <groupId>org.apache.spark</groupId>
-    <artifactId>spark-sql_2.13</artifactId>
-    <version>3.5.3</version>
-    <scope>provided</scope>
-</dependency>
+1.  **Configuração de Argumentos JVM para o Spring Boot Maven Plugin:**
+    Adicionado `jvmArguments` ao `spring-boot-maven-plugin` para resolver `IllegalAccessError` ao acessar APIs internas do Java 17.
+
+    ```xml
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <jvmArguments>--add-opens java.base/sun.nio.ch=ALL-UNNAMED</jvmArguments>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+    ```
+
+2.  **Configuração de Argumentos JVM para o Maven Surefire Plugin (Testes):**
+    Adicionado `argLine` ao `maven-surefire-plugin` para passar os mesmos argumentos JVM durante a execução dos testes, evitando o `IllegalAccessError` também nos testes.
+
+    ```xml
+    <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+            <argLine>--add-opens java.base/sun.nio.ch=ALL-UNNAMED</argLine>
+        </configuration>
+    </plugin>
+    ```
+
+3.  **Dependências do Apache Spark e Servlet API:**
+    As dependências para `spark-core` e `spark-sql` foram adicionadas. Além disso, para resolver problemas de `NoClassDefFoundError` relacionados à API Servlet, a dependência `javax.servlet-api` foi explicitamente incluída. A dependência `jakarta.servlet-api` é utilizada pelo Spring Boot 3.x, mas `javax.servlet-api` é necessária para compatibilidade com componentes internos do Spark, como sua UI (mesmo que desabilitada).
+
+    ```xml
+    <dependencies>
+        <!-- ... outras dependências ... -->
+
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-core_2.13</artifactId>
+            <version>3.5.3</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-sql_2.13</artifactId>
+            <version>3.5.3</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <version>6.0.0</version>
+            <!-- Escopo 'provided' se o contêiner web (ex: Spring Boot embutido) já a fornece. -->
+        </dependency>
+
+        <!-- Explicitamente adicionada para compatibilidade com componentes internos do Spark que podem depender de javax.servlet -->
+        <dependency>
+            <groupId>javax.servlet</groupId>
+            <artifactId>javax.servlet-api</artifactId>
+            <version>3.1.0</version>
+            <scope>compile</scope>
+        </dependency>
+
+    </dependencies>
+    ```
+
+### Configuração da Aplicação (DemoApplication.java)
+
+Para evitar conflitos relacionados à inicialização da UI do Spark, a UI foi explicitamente desativada na criação do `SparkSession`:
+
+```java
+@SpringBootApplication
+public class DemoApplication {
+
+    private static final SparkSession spark = SparkSession.builder()
+            .appName("Demo")
+            .master("local[*]")
+            .config("spark.ui.enabled", false) // Desativa a UI do Spark
+            .getOrCreate();
+
+    public static void main(String[] args) {
+        SpringApplication.run(DemoApplication.class, args);
+
+        // Exemplo de uso do Spark:
+        String path = "/home/erick/Downloads/demo/src/main/resources/dados.csv";
+        Dataset<Row> df = spark.read().csv(path);
+        df.show();
+    }
+}
 ```
 
-Após adicionar essas dependências, você deve recompilar seu `pom.xml` usando o Maven para garantir que elas sejam instaladas corretamente:
+### Compilar e Instalar o Projeto
+Após realizar as alterações no `pom.xml` e no `DemoApplication.java`, execute o seguinte comando para compilar o projeto e instalar as dependências:
 
-```bash
-mvn install
-```
-
-### Construir a aplicação
-Para compilar o projeto e empacotá-lo em um arquivo JAR, execute o seguinte comando:
 ```bash
 ./mvnw clean install
 ```
 
-### Executar a aplicação
+### Executar a Aplicação
 Você pode executar a aplicação diretamente da linha de comando usando o Maven:
+
 ```bash
 ./mvnw spring-boot:run
 ```
@@ -56,53 +129,9 @@ Alternativamente, após a construção, você pode executar o arquivo JAR:
 java -jar target/demo-0.0.1-SNAPSHOT.jar
 ```
 
-### Executar testes
+### Executar Testes
 Para executar os testes unitários e de integração, use o seguinte comando:
+
 ```bash
 ./mvnw test
 ```
-
-Aplicação Spark:
-
-package com.example.demo;
-
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SparkSession;
-
-@SpringBootApplication
-public class DemoApplication {
-
-    /* [Cria SparkSession]
-     *  é apenas o construtor, ou seja, um builder vazio
-     *  ele não cria a sessão
-     *  ele so começa a configuração da sessão Spark
-     *  ele so começa a configuração do Spark
-     * */
-    private static final SparkSession spark = SparkSession.builder()
-            // Você abre a caixa de ferramentas.
-            // Mas ainda não construiu nada.
-            // Depois que você chama builder(), você configura a sessão:
-
-            .appName("Demo") // define o nome do app
-            .master("local[*]") //diz para rodar localmente usando todos os cores disponíveis
-
-            // Cria a SparkSession se ela ainda não existir
-            // Retorna a SparkSession já existente (reutiliza)
-            .getOrCreate(); // cria (ou retorna, se já existir) a sessão Spark, instanciando internamente
-
-    public static void main(String[] args) {
-        SpringApplication.run(DemoApplication.class, args);
-
-        // Caminho do CSV
-        String path = "/home/erick/Downloads/demo/src/main/resources/dados.csv";
-
-        // Ler o CSV
-        Dataset<Row> df = spark.read().csv(path);
-
-        df.show();
-    }
-
-}

@@ -21,10 +21,8 @@ public class DemoApplication {
             // Depois que você chama builder(), você configura a sessão:
 
             .appName("Demo") // define o nome do app
-            .master("local[*]") //diz para rodar localmente usando todos os cores disponíveis
-
-            // Cria a SparkSession se ela ainda não existir
-            // Retorna a SparkSession já existente (reutiliza)
+            .master("local[*]")
+            .config("spark.ui.enabled", false) // Desativa a UI do Spark
             .getOrCreate(); // cria (ou retorna, se já existir) a sessão Spark, instanciando internamente
 
     public static void main(String[] args) {

@@ -1,5 +1,4 @@
 package com.example.demo;
-
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.apache.spark.sql.Dataset;
@@ -29,10 +28,14 @@ public class DemoApplication {
         SpringApplication.run(DemoApplication.class, args);
 
         // Caminho do CSV
-        String path = "/home/erick/Downloads/demo/src/main/resources/dados.csv";
+        String path = "/home/erick/Downloads/app/src/main/resources/dados.csv";
 
         // Ler o CSV
-        Dataset<Row> df = spark.read().csv(path);
+        Dataset<Row> df = spark.read()
+            .option("header", "true")     // Informa ao Spark que a primeira linha é o cabeçalho
+            .option("inferSchema", "true") // Solicita ao Spark que detecte automaticamente os tipos das colunas
+            .csv(path);
+
 
         df.show();
     }

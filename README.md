@@ -69,14 +69,6 @@ Para garantir a compatibilidade e a execução correta do Apache Spark com o Spr
         </dependency>
 
         <dependency>
-            <groupId>jakarta.servlet</groupId>
-            <artifactId>jakarta.servlet-api</artifactId>
-            <version>6.0.0</version>
-            <!-- Escopo 'provided' se o contêiner web (ex: Spring Boot embutido) já a fornece. -->
-        </dependency>
-
-        <!-- Explicitamente adicionada para compatibilidade com componentes internos do Spark que podem depender de javax.servlet -->
-        <dependency>
             <groupId>javax.servlet</groupId>
             <artifactId>javax.servlet-api</artifactId>
             <version>3.1.0</version>

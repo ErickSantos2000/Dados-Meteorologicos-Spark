@@ -30,6 +30,9 @@ public class DemoApplication {
         // Caminho do CSV
         String path = "/home/erick/Downloads/App-Apache-Spark/src/main/resources/dados.csv";
 
+        // String path = "src/main/resources/customers-1000000.csv";        
+        // //https://www.datablist.com/pt/learn/csv/download-sample-csv-files
+
         // Ler o CSV
         Dataset<Row> df = spark.read()
             .option("header", "true")     // Informa ao Spark que a primeira linha é o cabeçalho

@@ -28,7 +28,7 @@ public class DemoApplication {
         SpringApplication.run(DemoApplication.class, args);
 
         // Caminho do CSV
-        String path = "/home/erick/Downloads/app/src/main/resources/dados.csv";
+        String path = "/home/erick/Downloads/App-Apache-Spark/src/main/resources/dados.csv";
 
         // Ler o CSV
         Dataset<Row> df = spark.read()

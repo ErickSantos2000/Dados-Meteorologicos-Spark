@@ -1,129 +1,66 @@
-# Processamento Apache Spark com Spring Boot
+# Projeto de Coleta e Processamento de Dados Meteorológicos com Spark
 
-## Introdução
-Este projeto integra o Apache Spark com uma aplicação Spring Boot para processamento de dados.
+Este projeto demonstra a integração de um agendador de tarefas (Spring Boot) com o processamento de dados em tempo real (streaming) utilizando Apache Spark.
 
-## Requisitos
-Para construir e executar esta aplicação, você precisa:
-- Java 17 ou mais recente
-- Maven 3.6.3 ou mais recente
+## Visão Geral
+
+A aplicação é composta por duas partes principais que funcionam em conjunto:
+
+1.  **Coletor de Dados Agendado**: Um componente Spring que, a cada 5 segundos, faz uma requisição à API [OpenWeatherMap](https://openweathermap.org/api) para obter os dados de temperatura e umidade da cidade de Guarabira, PB, Brasil. Esses dados são salvos em um novo arquivo JSON no diretório local `src/main/resources/dados-meteriologicos/`.
+
+2.  **Processamento de Streaming com Spark**: Um job do Apache Spark Structured Streaming é iniciado junto com a aplicação. Ele monitora o diretório onde os dados são salvos. Assim que um novo arquivo JSON é adicionado, o Spark o lê, processa os dados para calcular a média acumulada de temperatura e umidade, e exibe o resultado no console.
 
 ## Tecnologias Utilizadas
-- [Spring Boot](https://spring.io/projects/spring-boot)
-- [Apache Spark](https://spark.apache.org/)
 
-## Primeiros Passos
+*   **Java 17**
+*   **Spring Boot**: Utilizado para criar a aplicação e gerenciar o ciclo de vida dos componentes, incluindo o agendamento de tarefas.
+*   **Apache Spark**: Utilizado para o processamento de dados em tempo real (Structured Streaming).
+*   **Maven**: Para gerenciamento de dependências e build do projeto.
+*   **OpenWeatherMap API**: Fonte externa para os dados de clima.
 
-### Configuração do Projeto (pom.xml)
+## Pré-requisitos
 
-Para garantir a compatibilidade e a execução correta do Apache Spark com o Spring Boot em Java 17, foram realizadas as seguintes alterações no arquivo `pom.xml`:
+1.  **Java 17 ou superior** instalado.
+2.  **Maven** instalado.
+3.  Uma **chave de API (API Key)** do OpenWeatherMap. Você pode obter uma gratuitamente no site deles.
 
-1.  **Configuração de Argumentos JVM para o Spring Boot Maven Plugin:**
-    Adicionado `jvmArguments` ao `spring-boot-maven-plugin` para resolver `IllegalAccessError` ao acessar APIs internas do Java 17.
+## Como Configurar e Executar
 
-    ```xml
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration>
-                    <jvmArguments>--add-opens java.base/sun.nio.ch=ALL-UNNAMED</jvmArguments>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
+1.  **Clone o repositório:**
+    ```bash
+    git clone <URL_DO_REPOSITORIO>
+    cd Clima-Metorologio
     ```
 
-2.  **Configuração de Argumentos JVM para o Maven Surefire Plugin (Testes):**
-    Adicionado `argLine` ao `maven-surefire-plugin` para passar os mesmos argumentos JVM durante a execução dos testes, evitando o `IllegalAccessError` também nos testes.
-
-    ```xml
-    <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-surefire-plugin</artifactId>
-        <configuration>
-            <argLine>--add-opens java.base/sun.nio.ch=ALL-UNNAMED</argLine>
-        </configuration>
-    </plugin>
+2.  **Crie o diretório para os dados:**
+    O Spark precisa que o diretório de leitura exista antes de iniciar.
+    ```bash
+    mkdir -p src/main/resources/dados-meteriologicos
     ```
 
-3.  **Dependências do Apache Spark e Servlet API:**
-    As dependências para `spark-core` e `spark-sql` foram adicionadas. Além disso, para resolver problemas de `NoClassDefFoundError` relacionados à API Servlet, a dependência `javax.servlet-api` foi explicitamente incluída. A dependência `jakarta.servlet-api` é utilizada pelo Spring Boot 3.x, mas `javax.servlet-api` é necessária para compatibilidade com componentes internos do Spark, como sua UI (mesmo que desabilitada).
+3.  **Insira sua API Key:**
+    Abra o arquivo `src/main/java/com/example/demo/AgendadorClimaApi.java` e substitua o placeholder `"SUA_API_KEY"` pela sua chave da API do OpenWeatherMap.
 
-    ```xml
-    <dependencies>
-        <!-- ... outras dependências ... -->
-
-        <dependency>
-            <groupId>org.apache.spark</groupId>
-            <artifactId>spark-core_2.13</artifactId>
-            <version>3.5.3</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.spark</groupId>
-            <artifactId>spark-sql_2.13</artifactId>
-            <version>3.5.3</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>javax.servlet</groupId>
-            <artifactId>javax.servlet-api</artifactId>
-            <version>3.1.0</version>
-            <scope>compile</scope>
-        </dependency>
-
-    </dependencies>
+    ```java
+    // Linha 24 (aproximadamente)
+    private final String apiKey = "SUA_API_KEY";
     ```
 
-### Configuração da Aplicação (DemoApplication.java)
+4.  **Recompile o projeto com Maven:**
+    Use o Maven Wrapper para compilar e executar o projeto.
+    ```bash
+    # compila o projeto com Maven
+    ./mvnw clean install
+    
+    # executa o projeto spring boot
+    ./mvnw spring-boot:run
+    ```
 
-Para evitar conflitos relacionados à inicialização da UI do Spark, a UI foi explicitamente desativada na criação do `SparkSession`:
+Após a inicialização, você verá no console a saída do Spark sendo atualizada a cada 5 segundos com a média de temperatura e umidade, à medida que novos dados são coletados e processados.
 
-```java
-@SpringBootApplication
-public class DemoApplication {
+## Estrutura do Projeto
 
-    private static final SparkSession spark = SparkSession.builder()
-            .appName("Demo")
-            .master("local[*]")
-            .config("spark.ui.enabled", false) // Desativa a UI do Spark
-            .getOrCreate();
-
-    public static void main(String[] args) {
-        SpringApplication.run(DemoApplication.class, args);
-
-        // Exemplo de uso do Spark:
-        String path = "/home/erick/Downloads/demo/src/main/resources/dados.csv";
-        Dataset<Row> df = spark.read().csv(path);
-        df.show();
-    }
-}
-```
-
-### Compilar e Instalar o Projeto
-Após realizar as alterações no `pom.xml` e no `DemoApplication.java`, execute o seguinte comando para compilar o projeto e instalar as dependências:
-
-```bash
-./mvnw clean install
-```
-
-### Executar a Aplicação
-Você pode executar a aplicação diretamente da linha de comando usando o Maven:
-
-```bash
-./mvnw spring-boot:run
-```
-Alternativamente, após a construção, você pode executar o arquivo JAR:
-```bash
-java -jar target/demo-0.0.1-SNAPSHOT.jar
-```
-
-### Executar Testes
-Para executar os testes unitários e de integração, use o seguinte comando:
-
-```bash
-./mvnw test
-```
+*   `src/main/java/com/example/demo/DemoApplication.java`: Classe principal que inicializa o Spring Boot e o job de streaming do Spark.
+*   `src/main/java/com/example/demo/AgendadorClimaApi.java`: Componente que busca os dados da API OpenWeatherMap de forma agendada.
+*   `src/main/resources/dados-meteriologicos/`: Diretório monitorado pelo Spark, onde os dados de clima são salvos em formato JSON.
+*   `pom.xml`: Arquivo de configuração do Maven com todas as dependências do projeto (Spring, Spark, etc.).

@@ -13,74 +13,87 @@ import static org.apache.spark.sql.types.DataTypes.*;
 @EnableScheduling // habilita o suporte para execução de tarefas agendadas
 @SpringBootApplication // marca a classe como uma aplicação spring boot
 public class DemoApplication {
+
     public static void main(String[] args) throws Exception {
         SpringApplication.run(DemoApplication.class, args);
 
-        // Inicia o processo de streaming do Spark
-        startSparkStreaming();
+        String modo = (args.length > 0) ? args[0] : "alertas";
+
+        startSparkStreaming(modo);
     }
 
-    // cria e configura a sessão do spark
     private static final SparkSession spark = SparkSession.builder()
             .appName("Meterologia em Streaming")
-
             .master("local[*]")
-            // desabilita a interface web do Spark para esta aplicação, pois gera conflito com spring
             .config("spark.ui.enabled", false)
             .getOrCreate();
 
-    // Define o esquema (estrutura) que o Spark usará para ler os dados JSON.
-    // Isso é crucial no Structured Streaming, pois o Spark precisa saber a
-    // estrutura dos dados antes de começar a lê-los.
-
-    // define um schema para os dados meteriologicos
     private static final StructType schemaMetoriologico = new StructType()
             .add("cidade", StringType, false)
             .add("temperatura", DoubleType, false)
             .add("umidade", DoubleType, false)
-            .add("timestamp", StringType, false); // Será convertido para TimestampType depois
+            .add("timestamp", StringType, false);
 
-    private static void startSparkStreaming() throws Exception {
-        // O diretório monitorado (deve ser o mesmo usado pelo Scheduler)
+
+    private static void startSparkStreaming(String modo) throws Exception {
+
         String caminhoFluxo = "src/main/resources/dados-meteriologicos";
 
-        // 2. Leitura do Stream (Source)
         Dataset<Row> liveDataStream = spark.readStream()
                 .schema(schemaMetoriologico)
-                .option("maxFilesPerTrigger", 1) // Garante que cada arquivo é processado individualmente
-                .json(caminhoFluxo); // Monitora a pasta para novos arquivos JSON
+                .option("maxFilesPerTrigger", 1)
+                .json(caminhoFluxo);
 
-        // 3. Transformação: Detecção de Anomalias
-        Dataset<Row> alertas = liveDataStream
-                // Converte a string de timestamp para um tipo Timestamp
-                .withColumn("timestamp_col", to_timestamp(col("timestamp")))
-                // Filtra dados para gerar um ALERTA (Temperatura > 30°C)
-                // .filter(col("temperatura").gt(30.0))
-                .withColumn("alerta", lit("🚨 ALERTA: Temperatura Alta Detectada!"))
-                .select( "cidade", "temperatura" ,"umidade" ,"timestamp_col");
+        // ALERTAS
+        if (modo.equalsIgnoreCase("alertas")) {
 
-        // 4. Carregamento (Sink)
-        Dataset<Row> medias = alertas
+            Dataset<Row> alertas = liveDataStream
+                    .withColumn("timestamp_col", to_timestamp(col("timestamp")))
+                    .withColumn(
+                            "mensagem",
+                            when(col("temperatura").geq(30.0),
+                                    concat(
+                                            lit("ALERTA: Temperatura Alta! "),
+                                            lit(" | Cidade: "), col("cidade"),
+                                            lit(" | Temperatura: "), col("temperatura")
+                                    )
+                            ).otherwise(
+                                    concat(
+                                            lit("Cidade: "), col("cidade"),
+                                            lit(" | Temperatura: "), col("temperatura"),
+                                            lit(" | Umidade: "), col("umidade"),
+                                            lit(" | Timestamp: "), col("timestamp_col")
+                                    )
+                            )
+                    )
+                    .select("mensagem");
 
-                .groupBy() // faz agrupamento
-                .agg(
-                        avg(col("temperatura")).as("media_temperatura_acumulada"),
-                        avg(col("umidade")).as("media_umidade_acumulada")
-                );
-
-        StreamingQuery query1 = alertas.writeStream()
-                .outputMode("append")
-                .format("console") // exibe os resultados no console
-                .option("truncate", false) // exibe todas as colunas
-                .start();
-
-        StreamingQuery query2 = medias.writeStream()
-                    .outputMode("complete")
-                    .format("console") // Exibe os resultados no console
-                    .option("truncate", false) // Exibe todas as colunas
+            StreamingQuery queryAlerta = alertas.writeStream()
+                    .outputMode("append")
+                    .format("console")
+                    .option("truncate", false)
                     .start();
 
-        query1.awaitTermination(); // Mantém o processo do Spark rodando
-        query2.awaitTermination();
+            queryAlerta.awaitTermination();
+        }
+
+        // MEDIAS
+        if (modo.equalsIgnoreCase("medias")) {
+
+            Dataset<Row> medias = liveDataStream
+                    .groupBy("cidade")
+                    .agg(
+                            avg(col("temperatura")).as("media_temperatura_acumulada"),
+                            avg(col("umidade")).as("media_umidade_acumulada")
+                    );
+
+            StreamingQuery queryMedias = medias.writeStream()
+                    .outputMode("complete")
+                    .format("console")
+                    .option("truncate", false)
+                    .start();
+
+            queryMedias.awaitTermination();
+        }
     }
 }

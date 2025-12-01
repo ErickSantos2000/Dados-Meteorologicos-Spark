@@ -53,7 +53,11 @@ A aplicação é composta por duas partes principais que funcionam em conjunto:
     ./mvnw clean install
     
     # executa o projeto spring boot
-    ./mvnw spring-boot:run
+    # aparece informações de temperatura e possivel alerte se temperatura estiver acima de 30 graus
+    ./mvnw spring-boot:run -Dspring-boot.run.arguments=alertas
+    
+    # aparece as medias de temperatura por cidade
+    ./mvnw spring-boot:run -Dspring-boot.run.arguments=medias
     ```
 
 Após a inicialização, você verá no console a saída do Spark sendo atualizada a cada 5 segundos com a média de temperatura e umidade, à medida que novos dados são coletados e processados.

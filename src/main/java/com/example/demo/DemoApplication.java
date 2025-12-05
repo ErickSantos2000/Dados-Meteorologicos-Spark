@@ -3,6 +3,7 @@ package com.example.demo;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.streaming.StreamingQuery;
 import org.apache.spark.sql.types.*;
+
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -10,14 +11,19 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import static org.apache.spark.sql.functions.*;
 import static org.apache.spark.sql.types.DataTypes.*;
 
-@EnableScheduling // habilita o suporte para execução de tarefas agendadas
-@SpringBootApplication // marca a classe como uma aplicação spring boot
+@EnableScheduling
+@SpringBootApplication
 public class DemoApplication {
 
     public static void main(String[] args) throws Exception {
+
         SpringApplication.run(DemoApplication.class, args);
 
-        String modo = (args.length > 0) ? args[0] : "alertas";
+        String modo = "alertas";
+
+        if(args.length > 0){
+            modo = args[0];
+        }
 
         startSparkStreaming(modo);
     }
@@ -44,18 +50,21 @@ public class DemoApplication {
                 .option("maxFilesPerTrigger", 1)
                 .json(caminhoFluxo);
 
-        // ALERTAS
+
         if (modo.equalsIgnoreCase("alertas")) {
 
             Dataset<Row> alertas = liveDataStream
                     .withColumn("timestamp_col", to_timestamp(col("timestamp")))
+
                     .withColumn(
                             "mensagem",
                             when(col("temperatura").geq(30.0),
                                     concat(
-                                            lit("ALERTA: Temperatura Alta! "),
-                                            lit(" | Cidade: "), col("cidade"),
-                                            lit(" | Temperatura: "), col("temperatura")
+                                            lit("Cidade: "), col("cidade"),
+                                            lit(" | Temperatura: "), col("temperatura"),
+                                            lit(" | Umidade: "), col("umidade"),
+                                            lit(" | Timestamp: "), col("timestamp_col"),
+                                            lit(" | ALERTA: Temperatura Alta! ")
                                     )
                             ).otherwise(
                                     concat(
@@ -77,14 +86,18 @@ public class DemoApplication {
             queryAlerta.awaitTermination();
         }
 
-        // MEDIAS
+
         if (modo.equalsIgnoreCase("medias")) {
 
             Dataset<Row> medias = liveDataStream
-                    .groupBy("cidade")
+                    .withColumn("timestamp_col", to_timestamp(col("timestamp")))
+                    .groupBy(
+                            window(col("timestamp_col"), "24 hours"),
+                            col("cidade")
+                    )
                     .agg(
-                            avg(col("temperatura")).as("media_temperatura_acumulada"),
-                            avg(col("umidade")).as("media_umidade_acumulada")
+                            avg(col("temperatura")).as("media_temperatura"),
+                            avg(col("umidade")).as("media_umidade")
                     );
 
             StreamingQuery queryMedias = medias.writeStream()
@@ -95,5 +108,6 @@ public class DemoApplication {
 
             queryMedias.awaitTermination();
         }
+
     }
 }
